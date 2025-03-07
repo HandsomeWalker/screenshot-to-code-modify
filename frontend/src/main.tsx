@@ -1,4 +1,4 @@
-import React from "react";
+// import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
@@ -11,7 +11,8 @@ import BestOfNEvalsPage from "./components/evals/BestOfNEvalsPage.tsx";
 import AllEvalsPage from "./components/evals/AllEvalsPage.tsx";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+  // <React.StrictMode>
+  <>
     <Router>
       <Routes>
         <Route path="/" element={<App />} />
@@ -23,5 +24,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       </Routes>
     </Router>
     <Toaster toastOptions={{ className: "dark:bg-zinc-950 dark:text-white" }} />
-  </React.StrictMode>
+  </>
+  // </React.StrictMode>
 );

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogClose,
@@ -15,7 +15,7 @@ import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../ui/select";
 import { capitalize } from "../../lib/utils";
-import { IS_RUNNING_ON_CLOUD } from "../../config";
+import { HTTP_BACKEND_URL, IS_RUNNING_ON_CLOUD } from "../../config";
 import {
   Accordion,
   AccordionContent,
@@ -29,10 +29,26 @@ interface Props {
 }
 
 function SettingsDialog({ settings, setSettings }: Props) {
+  const [llms, setLlms] = useState<string[]>([]);
+  useEffect(() => {
+    async function fetchLlms() {
+      const response = await fetch(`${HTTP_BACKEND_URL}/get-llms`);
+      const data = await response.json();
+      setLlms(data);
+      handleModelChange(data?.[0]);
+    }
+    fetchLlms();
+  }, []);
   const handleThemeChange = (theme: EditorTheme) => {
     setSettings((s) => ({
       ...s,
       editorTheme: theme,
+    }));
+  };
+  const handleModelChange = (model: string) => {
+    setSettings((s) => ({
+      ...s,
+      selectedModel: model,
     }));
   };
 
@@ -46,6 +62,30 @@ function SettingsDialog({ settings, setSettings }: Props) {
           <DialogTitle className="mb-4">Settings</DialogTitle>
         </DialogHeader>
 
+        <div className="flex items-center justify-between">
+          <Label htmlFor="image-generation">
+            <div>模型选择</div>
+            <div className="font-light mt-2 text-xs">必须配置key和base_url</div>
+          </Label>
+          {llms.length && (
+            <Select
+              name="editor-theme"
+              value={settings.selectedModel}
+              onValueChange={(value) => handleModelChange(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                {capitalize(settings.selectedModel)}
+              </SelectTrigger>
+              <SelectContent>
+                {llms.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {item}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="flex items-center space-x-2">
           <Label htmlFor="image-generation">
             <div>DALL-E Placeholder Image Generation</div>

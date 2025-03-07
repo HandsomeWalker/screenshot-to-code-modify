@@ -82,6 +82,7 @@ class ExtractedParams:
     anthropic_api_key: str | None
     openai_base_url: str | None
     generation_type: Literal["create", "update"]
+    selected_model: str | None
 
 
 async def extract_params(
@@ -129,6 +130,7 @@ async def extract_params(
         await throw_error(f"Invalid generation type: {generation_type}")
         raise ValueError(f"Invalid generation type: {generation_type}")
     generation_type = cast(Literal["create", "update"], generation_type)
+    selected_model = get_from_settings_dialog_or_env(params, "selectedModel", None)
 
     return ExtractedParams(
         stack=validated_stack,
@@ -138,6 +140,7 @@ async def extract_params(
         anthropic_api_key=anthropic_api_key,
         openai_base_url=openai_base_url,
         generation_type=generation_type,
+        selected_model=selected_model,
     )
 
 
@@ -198,6 +201,7 @@ async def stream_code(websocket: WebSocket):
     anthropic_api_key = extracted_params.anthropic_api_key
     should_generate_images = extracted_params.should_generate_images
     generation_type = extracted_params.generation_type
+    selected_model = extracted_params.selected_model
 
     print(f"Generating {stack} code in {input_mode} mode")
 
@@ -283,9 +287,38 @@ async def stream_code(websocket: WebSocket):
                     )
                     raise Exception("No OpenAI or Anthropic key")
 
+                if selected_model is not None:
+                    variant_models = [Llm(selected_model)]
+
                 tasks: List[Coroutine[Any, Any, Completion]] = []
                 for index, model in enumerate(variant_models):
-                    if model == Llm.GPT_4O_2024_11_20 or model == Llm.O1_2024_12_17:
+                    print('**************')
+                    print(model)
+                    print(openai_api_key)
+                    print(openai_base_url)
+                    if (
+                        model == Llm.DEEPSEEK_R1_DISTILL_LLAMA_70B
+                        or model == Llm.DEEPSEEK_REASONER
+                        or model == Llm.DEEPSEEK_CHAT
+                        or model == Llm.QWEN_MAX
+                    ):
+                        if openai_api_key is None:
+                            await throw_error("OpenAI API key is missing.")
+                            raise Exception("OpenAI API key is missing.")
+                        if openai_base_url is None:
+                            await throw_error("OpenAI base URL is missing.")
+                            raise Exception("OpenAI base URL is missing.")
+
+                        tasks.append(
+                            stream_openai_response(
+                                prompt_messages,
+                                api_key=openai_api_key,
+                                base_url=openai_base_url,
+                                callback=lambda x, i=index: process_chunk(x, i),
+                                model=model,
+                            )
+                        )
+                    elif model == Llm.GPT_4O_2024_11_20 or model == Llm.O1_2024_12_17:
                         if openai_api_key is None:
                             await throw_error("OpenAI API key is missing.")
                             raise Exception("OpenAI API key is missing.")

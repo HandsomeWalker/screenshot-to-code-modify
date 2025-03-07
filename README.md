@@ -1,3 +1,6 @@
+# 魔改说明
+启动服务后，点开设置，选择大模型，设置OpenAI API key和OpenAI Base URL，支持deepseek官网模型和阿里百炼的deepseek模型(目前免费)
+
 # screenshot-to-code
 
 A simple tool to convert screenshots, mockups and Figma designs into clean, functional code using AI. **Now supporting Claude Sonnet 3.7!**
