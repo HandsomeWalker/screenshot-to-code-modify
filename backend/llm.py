@@ -17,10 +17,9 @@ from utils import pprint_prompt
 
 # Actual model versions that are passed to the LLMs and stored in our logs
 class Llm(Enum):
-    DEEPSEEK_R1_DISTILL_LLAMA_70B = "deepseek-r1-distill-llama-70b"
+    QWEN_2_5_VL_72B = "qwen2.5-vl-72b-instruct"
     DEEPSEEK_REASONER = "deepseek-reasoner"
     DEEPSEEK_CHAT = "deepseek-chat"
-    QWEN_MAX = "qwen-max"
     GPT_4_VISION = "gpt-4-vision-preview"
     GPT_4_TURBO_2024_04_09 = "gpt-4-turbo-2024-04-09"
     GPT_4O_2024_05_13 = "gpt-4o-2024-05-13"

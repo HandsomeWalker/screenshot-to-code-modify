@@ -292,15 +292,12 @@ async def stream_code(websocket: WebSocket):
 
                 tasks: List[Coroutine[Any, Any, Completion]] = []
                 for index, model in enumerate(variant_models):
-                    print('**************')
+                    print("**************")
                     print(model)
-                    print(openai_api_key)
-                    print(openai_base_url)
                     if (
-                        model == Llm.DEEPSEEK_R1_DISTILL_LLAMA_70B
+                        model == Llm.QWEN_2_5_VL_72B
                         or model == Llm.DEEPSEEK_REASONER
                         or model == Llm.DEEPSEEK_CHAT
-                        or model == Llm.QWEN_MAX
                     ):
                         if openai_api_key is None:
                             await throw_error("OpenAI API key is missing.")
