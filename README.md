@@ -1,5 +1,5 @@
 # 魔改说明
-启动服务后，点开设置，选择大模型，设置OpenAI API key和OpenAI Base URL，支持deepseek官网模型和阿里百炼的deepseek模型(目前免费)
+启动服务后，点开设置，选择大模型，设置OpenAI API key和OpenAI Base URL，支持deepseek官网模型和阿里百炼的deepseek模型(目前免费)，推荐默认的qwen2.5-vl-72b-instruct和claude效果很好
 
 # screenshot-to-code
 
