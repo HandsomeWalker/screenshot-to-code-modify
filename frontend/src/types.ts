@@ -32,11 +32,16 @@ export enum ScreenRecorderState {
   FINISHED = "finished",
 }
 
+export interface PromptContent {
+  text: string;
+  images: string[]; // Array of data URLs
+}
+
 export interface CodeGenerationParams {
   generationType: "create" | "update";
-  inputMode: "image" | "video";
-  image: string;
-  history?: string[];
+  inputMode: "image" | "video" | "text";
+  prompt: PromptContent;
+  history?: PromptContent[];
   isImportedFromCode?: boolean;
 }
 

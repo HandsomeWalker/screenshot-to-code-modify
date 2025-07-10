@@ -23,6 +23,7 @@ import { GenerationSettings } from "./components/settings/GenerationSettings";
 import StartPane from "./components/start-pane/StartPane";
 import { Commit } from "./components/commits/types";
 import { createCommit } from "./components/commits/utils";
+import GenerateFromText from "./components/generate-from-text/GenerateFromText";
 
 function App() {
   const {
@@ -33,6 +34,8 @@ function App() {
     setIsImportedFromCode,
     referenceImages,
     setReferenceImages,
+    initialPrompt,
+    setInitialPrompt,
 
     head,
     commits,
@@ -43,6 +46,8 @@ function App() {
     setCommitCode,
     resetCommits,
     resetHead,
+    updateVariantStatus,
+    resizeVariants,
 
     // Outputs
     appendExecutionConsole,
@@ -52,6 +57,8 @@ function App() {
   const {
     disableInSelectAndEditMode,
     setUpdateInstruction,
+    updateImages,
+    setUpdateImages,
     appState,
     setAppState,
   } = useAppStore();
@@ -110,6 +117,7 @@ function App() {
   const reset = () => {
     setAppState(AppState.INITIAL);
     setUpdateInstruction("");
+    setUpdateImages([]);
     disableInSelectAndEditMode();
     resetExecutionConsoles();
 
@@ -138,7 +146,12 @@ function App() {
     }
 
     // Re-run the create
-    doCreate(referenceImages, inputMode);
+    if (inputMode === "image" || inputMode === "video") {
+      doCreate(referenceImages, inputMode);
+    } else {
+      // TODO: Fix this
+      doCreateFromText(initialPrompt);
+    }
   };
 
   // Used when the user cancels the code generation
@@ -171,14 +184,16 @@ function App() {
     // Reset the execution console
     resetExecutionConsoles();
 
-    // Set the app state
+    // Set the app state to coding during generation
     setAppState(AppState.CODING);
 
     // Merge settings with params
     const updatedParams = { ...params, ...settings };
 
+    // Create variants dynamically - start with 4 to handle most cases
+    // Backend will use however many it needs (typically 3)
     const baseCommitObject = {
-      variants: [{ code: "" }, { code: "" }],
+      variants: Array(4).fill(null).map(() => ({ code: "" })),
     };
 
     const commitInputObject =
@@ -187,17 +202,15 @@ function App() {
             ...baseCommitObject,
             type: "ai_create" as const,
             parentHash: null,
-            inputs: { image_url: referenceImages[0] },
+            inputs: params.prompt,
           }
         : {
             ...baseCommitObject,
             type: "ai_edit" as const,
             parentHash: head,
-            inputs: {
-              prompt: params.history
-                ? params.history[params.history.length - 1]
-                : "",
-            },
+            inputs: params.history
+              ? params.history[params.history.length - 1]
+              : { text: "", images: [] },
           };
 
     // Create a new commit and set it as the head
@@ -205,28 +218,33 @@ function App() {
     addCommit(commit);
     setHead(commit.hash);
 
-    generateCode(
-      wsRef,
-      updatedParams,
-      // On change
-      (token, variantIndex) => {
+    generateCode(wsRef, updatedParams, {
+      onChange: (token, variantIndex) => {
         appendCommitCode(commit.hash, variantIndex, token);
       },
-      // On set code
-      (code, variantIndex) => {
+      onSetCode: (code, variantIndex) => {
         setCommitCode(commit.hash, variantIndex, code);
       },
-      // On status update
-      (line, variantIndex) => appendExecutionConsole(variantIndex, line),
-      // On cancel
-      () => {
+      onStatusUpdate: (line, variantIndex) => appendExecutionConsole(variantIndex, line),
+      onVariantComplete: (variantIndex) => {
+        console.log(`Variant ${variantIndex} complete event received`);
+        updateVariantStatus(commit.hash, variantIndex, "complete");
+      },
+      onVariantError: (variantIndex, error) => {
+        console.error(`Error in variant ${variantIndex}:`, error);
+        updateVariantStatus(commit.hash, variantIndex, "error", error);
+      },
+      onVariantCount: (count) => {
+        console.log(`Backend is using ${count} variants`);
+        resizeVariants(commit.hash, count);
+      },
+      onCancel: () => {
         cancelCodeGenerationAndReset(commit);
       },
-      // On complete
-      () => {
+      onComplete: () => {
         setAppState(AppState.CODE_READY);
-      }
-    );
+      },
+    });
   }
 
   // Initial version creation
@@ -242,10 +260,23 @@ function App() {
     if (referenceImages.length > 0) {
       doGenerateCode({
         generationType: "create",
-        image: referenceImages[0],
         inputMode,
+        prompt: { text: "", images: [referenceImages[0]] },
       });
     }
+  }
+
+  function doCreateFromText(text: string) {
+    // Reset any existing state
+    reset();
+
+    setInputMode("text");
+    setInitialPrompt(text);
+    doGenerateCode({
+      generationType: "create",
+      inputMode: "text",
+      prompt: { text, images: [] },
+    });
   }
 
   // Subsequent updates
@@ -285,17 +316,24 @@ function App() {
         selectedElement.outerHTML;
     }
 
-    const updatedHistory = [...historyTree, modifiedUpdateInstruction];
+    const updatedHistory = [
+      ...historyTree,
+      { text: modifiedUpdateInstruction, images: updateImages },
+    ];
 
     doGenerateCode({
       generationType: "update",
       inputMode,
-      image: referenceImages[0],
+      prompt:
+        inputMode === "text"
+          ? { text: initialPrompt, images: [] }
+          : { text: "", images: [referenceImages[0]] },
       history: updatedHistory,
       isImportedFromCode,
     });
 
     setUpdateInstruction("");
+    setUpdateImages([]);
   }
 
   const handleTermDialogOpenChange = (open: boolean) => {
@@ -363,6 +401,10 @@ function App() {
           {/* {appState !== AppState.CODE_READY && <TipLink />} */}
 
           {IS_RUNNING_ON_CLOUD && !settings.openAiApiKey && <OnboardingNote />}
+
+          {appState === AppState.INITIAL && (
+            <GenerateFromText doCreateFromText={doCreateFromText} />
+          )}
 
           {/* Rest of the sidebar when we're not in the initial state */}
           {(appState === AppState.CODING ||
