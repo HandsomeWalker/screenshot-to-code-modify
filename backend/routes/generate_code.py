@@ -64,7 +64,7 @@ from prompts.types import Stack, PromptContent
 # from utils import pprint_prompt
 from ws.constants import APP_ERROR_WEB_SOCKET_CODE  # type: ignore
 
-
+global_selected_model: str | None
 router = APIRouter()
 
 
@@ -214,7 +214,6 @@ class ExtractedParams:
     anthropic_api_key: str | None
     openai_base_url: str | None
     generation_type: Literal["create", "update"]
-    selected_model: str | None
     prompt: PromptContent
     history: List[Dict[str, Any]]
     is_imported_from_code: bool
@@ -272,7 +271,10 @@ class ParameterExtractionStage:
             await self.throw_error(f"Invalid generation type: {generation_type}")
             raise ValueError(f"Invalid generation type: {generation_type}")
         generation_type = cast(Literal["create", "update"], generation_type)
-        selected_model = self._get_from_settings_dialog_or_env(params, "selectedModel", None)
+        global global_selected_model
+        global_selected_model = self._get_from_settings_dialog_or_env(
+            params, "selectedModel", None
+        )
 
         # Extract prompt content
         prompt = params.get("prompt", {"text": "", "images": []})
@@ -294,7 +296,6 @@ class ParameterExtractionStage:
             prompt=prompt,
             history=history,
             is_imported_from_code=is_imported_from_code,
-            selected_model=selected_model,
         )
 
     def _get_from_settings_dialog_or_env(
@@ -401,7 +402,15 @@ class ModelSelectionStage:
         for i in range(num_variants):
             selected_models.append(models[i % len(models)])
 
-        return selected_models
+        global global_selected_model
+        if global_selected_model == Llm.QWEN_2_5_VL_72B.value:
+            return [Llm.QWEN_2_5_VL_72B]
+        elif global_selected_model == Llm.DEEPSEEK_CHAT.value:
+            return [Llm.DEEPSEEK_CHAT]
+        elif global_selected_model == Llm.DEEPSEEK_REASONER.value:
+            return [Llm.DEEPSEEK_REASONER]
+        else:
+            return selected_models
 
 
 class PromptCreationStage:
@@ -596,27 +605,23 @@ class ParallelGenerationStage:
         tasks: List[Coroutine[Any, Any, Completion]] = []
 
         for index, model in enumerate(variant_models):
-            print("**************")
-            print(model)
             if (
                 model == Llm.QWEN_2_5_VL_72B
                 or model == Llm.DEEPSEEK_REASONER
                 or model == Llm.DEEPSEEK_CHAT
             ):
-                if openai_api_key is None:
-                    await throw_error("OpenAI API key is missing.")
+                if self.openai_api_key is None:
                     raise Exception("OpenAI API key is missing.")
-                if openai_base_url is None:
-                    await throw_error("OpenAI base URL is missing.")
+                if self.openai_base_url is None:
                     raise Exception("OpenAI base URL is missing.")
 
                 tasks.append(
                     stream_openai_response(
                         prompt_messages,
-                        api_key=openai_api_key,
-                        base_url=openai_base_url,
-                        callback=lambda x, i=index: process_chunk(x, i),
-                        model=model,
+                        api_key=self.openai_api_key,
+                        base_url=self.openai_base_url,
+                        callback=lambda x, i=index: self._process_chunk(x, i),
+                        model_name=model.value,
                     )
                 )
             elif model in OPENAI_MODELS:
