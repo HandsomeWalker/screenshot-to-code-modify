@@ -18,7 +18,6 @@ import { useAppStore } from "./store/app-store";
 import { useProjectStore } from "./store/project-store";
 import Sidebar from "./components/sidebar/Sidebar";
 import PreviewPane from "./components/preview/PreviewPane";
-import DeprecationMessage from "./components/messages/DeprecationMessage";
 import { GenerationSettings } from "./components/settings/GenerationSettings";
 import StartPane from "./components/start-pane/StartPane";
 import { Commit } from "./components/commits/types";
@@ -73,7 +72,7 @@ function App() {
       isImageGenerationEnabled: true,
       editorTheme: EditorTheme.COBALT,
       generatedCodeConfig: Stack.HTML_TAILWIND,
-      codeGenerationModel: CodeGenerationModel.CLAUDE_3_5_SONNET_2024_06_20,
+      codeGenerationModel: CodeGenerationModel.CLAUDE_4_5_SONNET_2025_09_29,
       // Only relevant for hosted version
       isTermOfServiceAccepted: false,
       selectedModel: "deepseek-r1-distill-llama-70b"
@@ -83,20 +82,9 @@ function App() {
 
   const wsRef = useRef<WebSocket>(null);
 
-  // Code generation model from local storage or the default value
-  const model =
-    settings.codeGenerationModel || CodeGenerationModel.GPT_4_VISION;
-
-  const showBetterModelMessage =
-    model !== CodeGenerationModel.GPT_4O_2024_05_13 &&
-    model !== CodeGenerationModel.CLAUDE_3_5_SONNET_2024_06_20 &&
-    appState === AppState.INITIAL;
-
   const showSelectAndEditFeature =
-    (model === CodeGenerationModel.GPT_4O_2024_05_13 ||
-      model === CodeGenerationModel.CLAUDE_3_5_SONNET_2024_06_20) &&
-    (settings.generatedCodeConfig === Stack.HTML_TAILWIND ||
-      settings.generatedCodeConfig === Stack.HTML_CSS);
+    settings.generatedCodeConfig === Stack.HTML_TAILWIND ||
+    settings.generatedCodeConfig === Stack.HTML_CSS;
 
   // Indicate coding state using the browser tab's favicon and title
   useBrowserTabIndicator(appState === AppState.CODING);
@@ -193,7 +181,9 @@ function App() {
     // Create variants dynamically - start with 4 to handle most cases
     // Backend will use however many it needs (typically 3)
     const baseCommitObject = {
-      variants: Array(4).fill(null).map(() => ({ code: "" })),
+      variants: Array(4)
+        .fill(null)
+        .map(() => ({ code: "" })),
     };
 
     const commitInputObject =
@@ -225,7 +215,8 @@ function App() {
       onSetCode: (code, variantIndex) => {
         setCommitCode(commit.hash, variantIndex, code);
       },
-      onStatusUpdate: (line, variantIndex) => appendExecutionConsole(variantIndex, line),
+      onStatusUpdate: (line, variantIndex) =>
+        appendExecutionConsole(variantIndex, line),
       onVariantComplete: (variantIndex) => {
         console.log(`Variant ${variantIndex} complete event received`);
         updateVariantStatus(commit.hash, variantIndex, "complete");
@@ -248,7 +239,11 @@ function App() {
   }
 
   // Initial version creation
-  function doCreate(referenceImages: string[], inputMode: "image" | "video") {
+  function doCreate(
+    referenceImages: string[],
+    inputMode: "image" | "video",
+    textPrompt: string = ""
+  ) {
     // Reset any existing state
     reset();
 
@@ -261,7 +256,7 @@ function App() {
       doGenerateCode({
         generationType: "create",
         inputMode,
-        prompt: { text: "", images: [referenceImages[0]] },
+        prompt: { text: textPrompt, images: [referenceImages[0]] },
       });
     }
   }
@@ -393,9 +388,6 @@ function App() {
 
           {/* Generation settings like stack and model */}
           <GenerationSettings settings={settings} setSettings={setSettings} />
-
-          {/* Show auto updated message when older models are choosen */}
-          {showBetterModelMessage && <DeprecationMessage />}
 
           {/* Show tip link until coding is complete */}
           {/* {appState !== AppState.CODE_READY && <TipLink />} */}

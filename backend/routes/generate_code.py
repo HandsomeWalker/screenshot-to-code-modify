@@ -5,6 +5,7 @@ import traceback
 from typing import Callable, Awaitable
 from fastapi import APIRouter, WebSocket
 import openai
+from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 from codegen.utils import extract_html_content
 from config import (
     ANTHROPIC_API_KEY,
@@ -170,6 +171,9 @@ class WebSocketCommunicator:
         variantIndex: int,
     ) -> None:
         """Send a message to the client with debug logging"""
+        if self.is_closed:
+            return
+
         # Print for debugging on the backend
         if type == "error":
             print(f"Error (variant {variantIndex + 1}): {value}")
@@ -180,16 +184,23 @@ class WebSocketCommunicator:
         elif type == "variantError":
             print(f"Variant {variantIndex + 1} error: {value}")
 
-        await self.websocket.send_json(
-            {"type": type, "value": value, "variantIndex": variantIndex}
-        )
+        try:
+            await self.websocket.send_json(
+                {"type": type, "value": value, "variantIndex": variantIndex}
+            )
+        except (ConnectionClosedOK, ConnectionClosedError):
+            print(f"WebSocket closed by client, skipping message: {type}")
+            self.is_closed = True
 
     async def throw_error(self, message: str) -> None:
         """Send an error message and close the connection"""
         print(message)
         if not self.is_closed:
-            await self.websocket.send_json({"type": "error", "value": message})
-            await self.websocket.close(APP_ERROR_WEB_SOCKET_CODE)
+            try:
+                await self.websocket.send_json({"type": "error", "value": message})
+                await self.websocket.close(APP_ERROR_WEB_SOCKET_CODE)
+            except (ConnectionClosedOK, ConnectionClosedError):
+                print("WebSocket already closed by client")
             self.is_closed = True
 
     async def receive_params(self) -> Dict[str, str]:
@@ -201,7 +212,10 @@ class WebSocketCommunicator:
     async def close(self) -> None:
         """Close the WebSocket connection"""
         if not self.is_closed:
-            await self.websocket.close()
+            try:
+                await self.websocket.close()
+            except (ConnectionClosedOK, ConnectionClosedError):
+                pass  # Already closed by client
             self.is_closed = True
 
 
@@ -364,34 +378,18 @@ class ModelSelectionStage:
     ) -> List[Llm]:
         """Simple model cycling that scales with num_variants"""
 
-        claude_model = Llm.CLAUDE_3_7_SONNET_2025_02_19
-
-        # For text input mode, use Claude 4 Sonnet as third option
-        # For other input modes (image/video), use Gemini as third option
-        if input_mode == "text":
-            third_model = Llm.CLAUDE_4_SONNET_2025_05_14
-        else:
-            # Gemini only works for create right now
-            if generation_type == "create":
-                third_model = Llm.GEMINI_2_0_FLASH
-            else:
-                third_model = claude_model
-
         # Define models based on available API keys
-        if (
-            openai_api_key
-            and anthropic_api_key
-            and (gemini_api_key or input_mode == "text")
-        ):
+        if gemini_api_key and anthropic_api_key:
             models = [
-                Llm.GPT_4_1_2025_04_14,
-                claude_model,
-                third_model,
+                Llm.GEMINI_3_FLASH_PREVIEW,
+                Llm.CLAUDE_4_5_SONNET_2025_09_29,
+                Llm.CLAUDE_4_5_OPUS_2025_11_01,
+                Llm.GEMINI_3_PRO_PREVIEW,
             ]
         elif openai_api_key and anthropic_api_key:
-            models = [claude_model, Llm.GPT_4_1_2025_04_14]
+            models = [Llm.CLAUDE_4_5_SONNET_2025_09_29, Llm.GPT_4_1_2025_04_14]
         elif anthropic_api_key:
-            models = [claude_model, Llm.CLAUDE_3_5_SONNET_2024_06_20]
+            models = [Llm.CLAUDE_4_5_SONNET_2025_09_29, Llm.CLAUDE_4_5_OPUS_2025_11_01]
         elif openai_api_key:
             models = [Llm.GPT_4_1_2025_04_14, Llm.GPT_4O_2024_11_20]
         else:
@@ -648,19 +646,12 @@ class ParallelGenerationStage:
                 if self.anthropic_api_key is None:
                     raise Exception("Anthropic API key is missing.")
 
-                # For creation, use Claude Sonnet 3.7
-                # For updates, we use Claude Sonnet 3.5 until we have tested Claude Sonnet 3.7
-                if params["generationType"] == "create":
-                    claude_model = Llm.CLAUDE_3_7_SONNET_2025_02_19
-                else:
-                    claude_model = Llm.CLAUDE_3_5_SONNET_2024_06_20
-
                 tasks.append(
                     stream_claude_response(
                         prompt_messages,
                         api_key=self.anthropic_api_key,
                         callback=lambda x, i=index: self._process_chunk(x, i),
-                        model_name=claude_model.value,
+                        model_name=model.value,
                     )
                 )
 
