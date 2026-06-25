@@ -27,18 +27,6 @@ function AllEvalsPage() {
           </Link>
 
           <Link
-            to="/evals/pairwise"
-            className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
-          >
-            <h2 className="text-xl font-semibold text-gray-800">
-              Pairwise Comparison
-            </h2>
-            <p className="text-gray-600">
-              Compare outputs from two different models
-            </p>
-          </Link>
-
-          <Link
             to="/evals/best-of-n"
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
@@ -49,13 +37,27 @@ function AllEvalsPage() {
           </Link>
 
           <Link
-            to="/evals/single"
+            to="/evals/openai-input-compare"
             className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
           >
             <h2 className="text-xl font-semibold text-gray-800">
-              Single Model Eval
+              OpenAI Input Compare
             </h2>
-            <p className="text-gray-600">Score outputs from a single model</p>
+            <p className="text-gray-600">
+              Find the first diverging input block between two requests
+            </p>
+          </Link>
+
+          <Link
+            to="/evals/prompt-reports"
+            className="block w-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow border border-gray-200"
+          >
+            <h2 className="text-xl font-semibold text-gray-800">
+              Prompt Reports
+            </h2>
+            <p className="text-gray-600">
+              Browse logged LLM requests with images, usage, and cost
+            </p>
           </Link>
         </div>
       </div>

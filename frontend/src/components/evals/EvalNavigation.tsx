@@ -21,13 +21,6 @@ function EvalNavigation() {
         </Link>
         
         <Link
-          to="/evals/pairwise"
-          className="hover:text-blue-300 transition-colors"
-        >
-          Pairwise
-        </Link>
-        
-        <Link
           to="/evals/best-of-n"
           className="hover:text-blue-300 transition-colors"
         >
@@ -35,10 +28,17 @@ function EvalNavigation() {
         </Link>
         
         <Link
-          to="/evals/single"
+          to="/evals/openai-input-compare"
           className="hover:text-blue-300 transition-colors"
         >
-          Single
+          Input Compare
+        </Link>
+
+        <Link
+          to="/evals/prompt-reports"
+          className="hover:text-blue-300 transition-colors"
+        >
+          Prompt Reports
         </Link>
       </div>
       

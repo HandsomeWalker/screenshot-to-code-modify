@@ -19,8 +19,15 @@ type WebSocketResponse = {
     | "error"
     | "variantComplete"
     | "variantError"
-    | "variantCount";
-  value: string;
+    | "variantCount"
+    | "variantModels"
+    | "thinking"
+    | "assistant"
+    | "toolStart"
+    | "toolResult";
+  value?: string;
+  data?: any;
+  eventId?: string;
   variantIndex: number;
 };
 
@@ -31,7 +38,15 @@ interface CodeGenerationCallbacks {
   onVariantComplete: (variantIndex: number) => void;
   onVariantError: (variantIndex: number, error: string) => void;
   onVariantCount: (count: number) => void;
-  onCancel: () => void;
+  onVariantModels: (models: string[]) => void;
+  onThinking: (content: string, variantIndex: number, eventId?: string) => void;
+  onAssistant: (content: string, variantIndex: number, eventId?: string) => void;
+  onToolStart: (data: any, variantIndex: number, eventId?: string) => void;
+  onToolResult: (data: any, variantIndex: number, eventId?: string) => void;
+  onCancel: (
+    reason: "user_cancelled" | "request_failed" | "connection_error",
+    errorMessage?: string
+  ) => void;
   onComplete: () => void;
 }
 
@@ -53,20 +68,30 @@ export function generateCode(
   ws.addEventListener("message", async (event: MessageEvent) => {
     const response = JSON.parse(event.data) as WebSocketResponse;
     if (response.type === "chunk") {
-      callbacks.onChange(response.value, response.variantIndex);
+      callbacks.onChange(response.value || "", response.variantIndex);
     } else if (response.type === "status") {
-      callbacks.onStatusUpdate(response.value, response.variantIndex);
+      callbacks.onStatusUpdate(response.value || "", response.variantIndex);
     } else if (response.type === "setCode") {
-      callbacks.onSetCode(response.value, response.variantIndex);
+      callbacks.onSetCode(response.value || "", response.variantIndex);
     } else if (response.type === "variantComplete") {
       callbacks.onVariantComplete(response.variantIndex);
     } else if (response.type === "variantError") {
-      callbacks.onVariantError(response.variantIndex, response.value);
+      callbacks.onVariantError(response.variantIndex, response.value || "");
     } else if (response.type === "variantCount") {
-      callbacks.onVariantCount(parseInt(response.value));
+      callbacks.onVariantCount(parseInt(response.value || "1"));
+    } else if (response.type === "variantModels") {
+      callbacks.onVariantModels(response.data?.models || []);
+    } else if (response.type === "thinking") {
+      callbacks.onThinking(response.value || "", response.variantIndex, response.eventId);
+    } else if (response.type === "assistant") {
+      callbacks.onAssistant(response.value || "", response.variantIndex, response.eventId);
+    } else if (response.type === "toolStart") {
+      callbacks.onToolStart(response.data, response.variantIndex, response.eventId);
+    } else if (response.type === "toolResult") {
+      callbacks.onToolResult(response.data, response.variantIndex, response.eventId);
     } else if (response.type === "error") {
       console.error("Error generating code", response.value);
-      toast.error(response.value);
+      toast.error(response.value || ERROR_MESSAGE);
     }
   });
 
@@ -74,14 +99,14 @@ export function generateCode(
     console.log("Connection closed", event.code, event.reason);
     if (event.code === USER_CLOSE_WEB_SOCKET_CODE) {
       toast.success(CANCEL_MESSAGE);
-      callbacks.onCancel();
+      callbacks.onCancel("user_cancelled");
     } else if (event.code === APP_ERROR_WEB_SOCKET_CODE) {
       console.error("Known server error", event);
-      callbacks.onCancel();
+      callbacks.onCancel("request_failed", event.reason || ERROR_MESSAGE);
     } else if (event.code !== 1000) {
       console.error("Unknown server or connection error", event);
       toast.error(ERROR_MESSAGE);
-      callbacks.onCancel();
+      callbacks.onCancel("connection_error", event.reason || ERROR_MESSAGE);
     } else {
       callbacks.onComplete();
     }

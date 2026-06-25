@@ -4,35 +4,44 @@ from typing import TypedDict
 
 # Actual model versions that are passed to the LLMs and stored in our logs
 class Llm(Enum):
+    # GPT
+    GPT_5_4_MINI_LOW = "gpt-5.4-mini (low thinking)"
+    GPT_5_4_2026_03_05_NONE = "gpt-5.4-2026-03-05 (no thinking)"
+    GPT_5_4_2026_03_05_LOW = "gpt-5.4-2026-03-05 (low thinking)"
+    GPT_5_4_2026_03_05_MEDIUM = "gpt-5.4-2026-03-05 (medium thinking)"
+    GPT_5_4_2026_03_05_HIGH = "gpt-5.4-2026-03-05 (high thinking)"
+    GPT_5_4_2026_03_05_XHIGH = "gpt-5.4-2026-03-05 (xhigh thinking)"
+    GPT_5_5_NONE = "gpt-5.5 (no thinking)"
+    GPT_5_5_LOW = "gpt-5.5 (low thinking)"
+    GPT_5_5_MEDIUM = "gpt-5.5 (medium thinking)"
+    GPT_5_5_HIGH = "gpt-5.5 (high thinking)"
+    GPT_5_5_XHIGH = "gpt-5.5 (xhigh thinking)"
+    # Claude
+    CLAUDE_SONNET_4_6 = "claude-sonnet-4-6"
+    CLAUDE_OPUS_4_8_LOW = "claude-opus-4-8 (low effort)"
+    CLAUDE_OPUS_4_8_MEDIUM = "claude-opus-4-8 (medium effort)"
+    CLAUDE_OPUS_4_8_HIGH = "claude-opus-4-8 (high effort)"
+    CLAUDE_OPUS_4_8_XHIGH = "claude-opus-4-8 (xhigh effort)"
+    CLAUDE_OPUS_4_8_MAX = "claude-opus-4-8 (max effort)"
+    CLAUDE_FABLE_5_LOW = "claude-fable-5 (low effort)"
+    CLAUDE_FABLE_5_MEDIUM = "claude-fable-5 (medium effort)"
+    CLAUDE_FABLE_5_HIGH = "claude-fable-5 (high effort)"
+    CLAUDE_FABLE_5_XHIGH = "claude-fable-5 (xhigh effort)"
+    CLAUDE_FABLE_5_MAX = "claude-fable-5 (max effort)"
+    # Gemini
+    GEMINI_3_FLASH_PREVIEW_HIGH = "gemini-3-flash-preview (high thinking)"
+    GEMINI_3_FLASH_PREVIEW_MINIMAL = "gemini-3-flash-preview (minimal thinking)"
+    GEMINI_3_1_PRO_PREVIEW_HIGH = "gemini-3.1-pro-preview (high thinking)"
+    GEMINI_3_1_PRO_PREVIEW_MEDIUM = "gemini-3.1-pro-preview (medium thinking)"
+    GEMINI_3_1_PRO_PREVIEW_LOW = "gemini-3.1-pro-preview (low thinking)"
+    GEMINI_3_5_FLASH_HIGH = "gemini-3.5-flash (high thinking)"
+    GEMINI_3_5_FLASH_MEDIUM = "gemini-3.5-flash (medium thinking)"
+    GEMINI_3_5_FLASH_LOW = "gemini-3.5-flash (low thinking)"
+    GEMINI_3_5_FLASH_MINIMAL = "gemini-3.5-flash (minimal thinking)"
+    # Custom
     QWEN_2_5_VL_72B = "qwen2.5-vl-72b-instruct"
     DEEPSEEK_REASONER = "deepseek-reasoner"
     DEEPSEEK_CHAT = "deepseek-chat"
-    GPT_4_VISION = "gpt-4-vision-preview"
-    GPT_4_TURBO_2024_04_09 = "gpt-4-turbo-2024-04-09"
-    GPT_4O_2024_05_13 = "gpt-4o-2024-05-13"
-    GPT_4O_2024_08_06 = "gpt-4o-2024-08-06"
-    GPT_4O_2024_11_20 = "gpt-4o-2024-11-20"
-    GPT_4_1_2025_04_14 = "gpt-4.1-2025-04-14"
-    GPT_4_1_MINI_2025_04_14 = "gpt-4.1-mini-2025-04-14"
-    GPT_4_1_NANO_2025_04_14 = "gpt-4.1-nano-2025-04-14"
-    GPT_5_2_2025_12_11 = "gpt-5.2-2025-12-11"
-    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
-    CLAUDE_3_OPUS = "claude-3-opus-20240229"
-    CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
-    CLAUDE_3_7_SONNET_2025_02_19 = "claude-3-7-sonnet-20250219"
-    CLAUDE_4_SONNET_2025_05_14 = "claude-sonnet-4-20250514"
-    CLAUDE_4_5_SONNET_2025_09_29 = "claude-sonnet-4-5-20250929"
-    CLAUDE_4_OPUS_2025_05_14 = "claude-opus-4-20250514"
-    CLAUDE_4_5_OPUS_2025_11_01 = "claude-opus-4-5-20251101"
-    GEMINI_2_0_FLASH_EXP = "gemini-2.0-flash-exp"
-    GEMINI_2_0_FLASH = "gemini-2.0-flash"
-    GEMINI_2_0_PRO_EXP = "gemini-2.0-pro-exp-02-05"
-    GEMINI_2_5_FLASH_PREVIEW_05_20 = "gemini-2.5-flash-preview-05-20"
-    GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview"
-    GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
-    O1_2024_12_17 = "o1-2024-12-17"
-    O4_MINI_2025_04_16 = "o4-mini-2025-04-16"
-    O3_2025_04_16 = "o3-2025-04-16"
 
 
 class Completion(TypedDict):
@@ -45,37 +54,79 @@ class Completion(TypedDict):
 # models elsewhere in the codebase.
 MODEL_PROVIDER: dict[Llm, str] = {
     # OpenAI models
-    Llm.GPT_4_VISION: "openai",
-    Llm.GPT_4_TURBO_2024_04_09: "openai",
-    Llm.GPT_4O_2024_05_13: "openai",
-    Llm.GPT_4O_2024_08_06: "openai",
-    Llm.GPT_4O_2024_11_20: "openai",
-    Llm.GPT_4_1_2025_04_14: "openai",
-    Llm.GPT_4_1_MINI_2025_04_14: "openai",
-    Llm.GPT_4_1_NANO_2025_04_14: "openai",
-    Llm.GPT_5_2_2025_12_11: "openai",
-    Llm.O1_2024_12_17: "openai",
-    Llm.O4_MINI_2025_04_16: "openai",
-    Llm.O3_2025_04_16: "openai",
+    Llm.GPT_5_4_MINI_LOW: "openai",
+    Llm.GPT_5_4_2026_03_05_NONE: "openai",
+    Llm.GPT_5_4_2026_03_05_LOW: "openai",
+    Llm.GPT_5_4_2026_03_05_MEDIUM: "openai",
+    Llm.GPT_5_4_2026_03_05_HIGH: "openai",
+    Llm.GPT_5_4_2026_03_05_XHIGH: "openai",
+    Llm.GPT_5_5_NONE: "openai",
+    Llm.GPT_5_5_LOW: "openai",
+    Llm.GPT_5_5_MEDIUM: "openai",
+    Llm.GPT_5_5_HIGH: "openai",
+    Llm.GPT_5_5_XHIGH: "openai",
     # Anthropic models
-    Llm.CLAUDE_3_SONNET: "anthropic",
-    Llm.CLAUDE_3_OPUS: "anthropic",
-    Llm.CLAUDE_3_HAIKU: "anthropic",
-    Llm.CLAUDE_3_7_SONNET_2025_02_19: "anthropic",
-    Llm.CLAUDE_4_SONNET_2025_05_14: "anthropic",
-    Llm.CLAUDE_4_5_SONNET_2025_09_29: "anthropic",
-    Llm.CLAUDE_4_OPUS_2025_05_14: "anthropic",
-    Llm.CLAUDE_4_5_OPUS_2025_11_01: "anthropic",
+    Llm.CLAUDE_SONNET_4_6: "anthropic",
+    Llm.CLAUDE_OPUS_4_8_LOW: "anthropic",
+    Llm.CLAUDE_OPUS_4_8_MEDIUM: "anthropic",
+    Llm.CLAUDE_OPUS_4_8_HIGH: "anthropic",
+    Llm.CLAUDE_OPUS_4_8_XHIGH: "anthropic",
+    Llm.CLAUDE_OPUS_4_8_MAX: "anthropic",
+    Llm.CLAUDE_FABLE_5_LOW: "anthropic",
+    Llm.CLAUDE_FABLE_5_MEDIUM: "anthropic",
+    Llm.CLAUDE_FABLE_5_HIGH: "anthropic",
+    Llm.CLAUDE_FABLE_5_XHIGH: "anthropic",
+    Llm.CLAUDE_FABLE_5_MAX: "anthropic",
     # Gemini models
-    Llm.GEMINI_2_0_FLASH_EXP: "gemini",
-    Llm.GEMINI_2_0_FLASH: "gemini",
-    Llm.GEMINI_2_0_PRO_EXP: "gemini",
-    Llm.GEMINI_2_5_FLASH_PREVIEW_05_20: "gemini",
-    Llm.GEMINI_3_FLASH_PREVIEW: "gemini",
-    Llm.GEMINI_3_PRO_PREVIEW: "gemini",
+    Llm.GEMINI_3_FLASH_PREVIEW_HIGH: "gemini",
+    Llm.GEMINI_3_FLASH_PREVIEW_MINIMAL: "gemini",
+    Llm.GEMINI_3_1_PRO_PREVIEW_HIGH: "gemini",
+    Llm.GEMINI_3_1_PRO_PREVIEW_MEDIUM: "gemini",
+    Llm.GEMINI_3_1_PRO_PREVIEW_LOW: "gemini",
+    Llm.GEMINI_3_5_FLASH_HIGH: "gemini",
+    Llm.GEMINI_3_5_FLASH_MEDIUM: "gemini",
+    Llm.GEMINI_3_5_FLASH_LOW: "gemini",
+    Llm.GEMINI_3_5_FLASH_MINIMAL: "gemini",
 }
 
 # Convenience sets for membership checks
 OPENAI_MODELS = {m for m, p in MODEL_PROVIDER.items() if p == "openai"}
 ANTHROPIC_MODELS = {m for m, p in MODEL_PROVIDER.items() if p == "anthropic"}
 GEMINI_MODELS = {m for m, p in MODEL_PROVIDER.items() if p == "gemini"}
+
+OPENAI_MODEL_CONFIG: dict[Llm, dict[str, str]] = {
+    Llm.GPT_5_4_MINI_LOW: {"api_name": "gpt-5.4-mini", "reasoning_effort": "low"},
+    Llm.GPT_5_4_2026_03_05_NONE: {
+        "api_name": "gpt-5.4-2026-03-05",
+        "reasoning_effort": "none",
+    },
+    Llm.GPT_5_4_2026_03_05_LOW: {
+        "api_name": "gpt-5.4-2026-03-05",
+        "reasoning_effort": "low",
+    },
+    Llm.GPT_5_4_2026_03_05_MEDIUM: {
+        "api_name": "gpt-5.4-2026-03-05",
+        "reasoning_effort": "medium",
+    },
+    Llm.GPT_5_4_2026_03_05_HIGH: {
+        "api_name": "gpt-5.4-2026-03-05",
+        "reasoning_effort": "high",
+    },
+    Llm.GPT_5_4_2026_03_05_XHIGH: {
+        "api_name": "gpt-5.4-2026-03-05",
+        "reasoning_effort": "xhigh",
+    },
+    Llm.GPT_5_5_NONE: {"api_name": "gpt-5.5", "reasoning_effort": "none"},
+    Llm.GPT_5_5_LOW: {"api_name": "gpt-5.5", "reasoning_effort": "low"},
+    Llm.GPT_5_5_MEDIUM: {"api_name": "gpt-5.5", "reasoning_effort": "medium"},
+    Llm.GPT_5_5_HIGH: {"api_name": "gpt-5.5", "reasoning_effort": "high"},
+    Llm.GPT_5_5_XHIGH: {"api_name": "gpt-5.5", "reasoning_effort": "xhigh"},
+}
+
+
+def get_openai_api_name(model: Llm) -> str:
+    return OPENAI_MODEL_CONFIG[model]["api_name"]
+
+
+def get_openai_reasoning_effort(model: Llm) -> str | None:
+    return OPENAI_MODEL_CONFIG.get(model, {}).get("reasoning_effort")
