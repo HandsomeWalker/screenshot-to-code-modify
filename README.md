@@ -87,8 +87,8 @@ Run the frontend:
 
 ```bash
 cd frontend
-yarn
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 Open http://localhost:5173 to use the app.
