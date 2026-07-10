@@ -1,40 +1,56 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { generateCode } from "./generateCode";
-import SettingsDialog from "./components/settings/SettingsDialog";
-import { AppState, CodeGenerationParams, EditorTheme, Settings } from "./types";
+import { AppState, AppTheme, EditorTheme, Settings } from "./types";
+import { NEW_DESIGN_SYSTEM_CONTENT } from "./lib/design-systems";
 import { IS_RUNNING_ON_CLOUD } from "./config";
-import { PicoBadge } from "./components/messages/PicoBadge";
 import { OnboardingNote } from "./components/messages/OnboardingNote";
 import { usePersistedState } from "./hooks/usePersistedState";
 import TermsOfServiceDialog from "./components/TermsOfServiceDialog";
 import { USER_CLOSE_WEB_SOCKET_CODE } from "./constants";
-import { extractHistory } from "./components/history/utils";
 import toast from "react-hot-toast";
+import { nanoid } from "nanoid";
 import { Stack } from "./lib/stacks";
 import { CodeGenerationModel } from "./lib/models";
 import useBrowserTabIndicator from "./hooks/useBrowserTabIndicator";
+import { LuChevronLeft } from "react-icons/lu";
+import {
+  buildAssistantHistoryMessage,
+  buildUserHistoryMessage,
+  cloneVariantHistory,
+  GenerationRequest,
+  registerAssetIds,
+  toRequestHistory,
+} from "./lib/prompt-history";
 // import TipLink from "./components/messages/TipLink";
 import { useAppStore } from "./store/app-store";
 import { useProjectStore } from "./store/project-store";
+import { useDesignSystems } from "./hooks/useDesignSystems";
+import {
+  buildSelectedElementInstruction,
+  describeElementContext,
+} from "./components/select-and-edit/utils";
+import { useEscapeToExitSelectMode } from "./components/select-and-edit/useEscapeToExitSelectMode";
 import Sidebar from "./components/sidebar/Sidebar";
+import IconStrip from "./components/sidebar/IconStrip";
+import HistoryDisplay from "./components/history/HistoryDisplay";
 import PreviewPane from "./components/preview/PreviewPane";
-import { GenerationSettings } from "./components/settings/GenerationSettings";
 import StartPane from "./components/start-pane/StartPane";
+import SettingsTab from "./components/settings/SettingsTab";
+import DesignSystemsModal from "./components/settings/DesignSystemsModal";
 import { Commit } from "./components/commits/types";
 import { createCommit } from "./components/commits/utils";
-import GenerateFromText from "./components/generate-from-text/GenerateFromText";
 
 function App() {
   const {
     // Inputs
     inputMode,
     setInputMode,
-    isImportedFromCode,
-    setIsImportedFromCode,
     referenceImages,
     setReferenceImages,
     initialPrompt,
     setInitialPrompt,
+    upsertPromptAssets,
+    resetPromptAssets,
 
     head,
     commits,
@@ -47,6 +63,11 @@ function App() {
     resetHead,
     updateVariantStatus,
     resizeVariants,
+    setVariantModels,
+    appendVariantHistoryMessage,
+    startAgentEvent,
+    appendAgentEventContent,
+    finishAgentEvent,
 
     // Outputs
     appendExecutionConsole,
@@ -60,6 +81,8 @@ function App() {
     setUpdateImages,
     appState,
     setAppState,
+    selectedElement,
+    setSelectedElement,
   } = useAppStore();
 
   // Settings
@@ -67,27 +90,83 @@ function App() {
     {
       openAiApiKey: null,
       openAiBaseURL: null,
+      replicateApiKey: null,
       anthropicApiKey: null,
+      geminiApiKey: null,
       screenshotOneApiKey: null,
       isImageGenerationEnabled: true,
       editorTheme: EditorTheme.COBALT,
       generatedCodeConfig: Stack.HTML_TAILWIND,
-      codeGenerationModel: CodeGenerationModel.CLAUDE_4_5_SONNET_2025_09_29,
+      codeGenerationModel: CodeGenerationModel.GEMINI_3_FLASH_PREVIEW_MINIMAL,
+      selectedDesignSystemId: null,
       // Only relevant for hosted version
       isTermOfServiceAccepted: false,
       selectedModel: "deepseek-r1-distill-llama-70b"
     },
     "setting"
   );
+  const [appTheme, setAppTheme] = usePersistedState<AppTheme>(
+    AppTheme.SYSTEM,
+    "app-theme"
+  );
 
   const wsRef = useRef<WebSocket>(null);
+  const lastThinkingEventIdRef = useRef<Record<number, string>>({});
+  const lastAssistantEventIdRef = useRef<Record<number, string>>({});
+  const lastToolEventIdRef = useRef<Record<number, string>>({});
 
-  const showSelectAndEditFeature =
-    settings.generatedCodeConfig === Stack.HTML_TAILWIND ||
-    settings.generatedCodeConfig === Stack.HTML_CSS;
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"preview" | "chat">("preview");
+  const [isDesignSystemsModalOpen, setIsDesignSystemsModalOpen] =
+    useState(false);
+  const [designSystemsModalInitialId, setDesignSystemsModalInitialId] =
+    useState<string | null>(null);
+  const {
+    designSystems,
+    isLoading: areDesignSystemsLoading,
+    createDesignSystem,
+    updateDesignSystem,
+    deleteDesignSystem,
+  } = useDesignSystems();
 
+  const setSelectedDesignSystemId = useCallback(
+    (id: string | null) => {
+      setSettings((prev) => ({ ...prev, selectedDesignSystemId: id }));
+    },
+    [setSettings]
+  );
+
+  const openDesignSystemsManager = useCallback((focusedId?: string | null) => {
+    setDesignSystemsModalInitialId(focusedId ?? null);
+    setIsDesignSystemsModalOpen(true);
+  }, []);
+
+  const handleAddNewDesignSystem = useCallback(async () => {
+    try {
+      const isFirst = designSystems.length === 0;
+      const created = await createDesignSystem({
+        name: `Design system ${designSystems.length + 1}`,
+        content: NEW_DESIGN_SYSTEM_CONTENT,
+      });
+      if (isFirst) {
+        setSelectedDesignSystemId(created.id);
+      }
+      openDesignSystemsManager(created.id);
+    } catch (error) {
+      console.error("Failed to create design system", error);
+      toast.error("Could not create design system.");
+    }
+  }, [
+    createDesignSystem,
+    designSystems.length,
+    openDesignSystemsManager,
+    setSelectedDesignSystemId,
+  ]);
   // Indicate coding state using the browser tab's favicon and title
   useBrowserTabIndicator(appState === AppState.CODING);
+
+  useEscapeToExitSelectMode();
 
   // When the user already has the settings in local storage, newly added keys
   // do not get added to the settings so if it's falsy, we populate it with the default
@@ -101,8 +180,66 @@ function App() {
     }
   }, [settings.generatedCodeConfig, setSettings]);
 
+  useEffect(() => {
+    if (!("selectedDesignSystemId" in settings)) {
+      setSettings((prev) => ({
+        ...prev,
+        selectedDesignSystemId: null,
+      }));
+    }
+  }, [settings, setSettings]);
+
+  useEffect(() => {
+    if (
+      settings.selectedDesignSystemId &&
+      !areDesignSystemsLoading &&
+      !designSystems.some(
+        (designSystem) => designSystem.id === settings.selectedDesignSystemId
+      )
+    ) {
+      setSettings((prev) => ({
+        ...prev,
+        selectedDesignSystemId: null,
+      }));
+    }
+  }, [
+    areDesignSystemsLoading,
+    designSystems,
+    settings.selectedDesignSystemId,
+    setSettings,
+  ]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      const isDark =
+        appTheme === AppTheme.DARK ||
+        (appTheme === AppTheme.SYSTEM && mediaQuery.matches);
+      document.documentElement.classList.toggle("dark", isDark);
+      document.body.classList.toggle("dark", isDark);
+    };
+
+    applyTheme();
+
+    if (appTheme !== AppTheme.SYSTEM) {
+      return;
+    }
+
+    const onChange = () => applyTheme();
+    mediaQuery.addEventListener("change", onChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", onChange);
+    };
+  }, [appTheme]);
+
+  const getAssetsById = () => useProjectStore.getState().assetsById;
+
   // Functions
   const reset = () => {
+    // Stop any in-flight generation so late websocket events can't mutate
+    // state after the reset (e.g. flipping the app back to CODE_READY).
+    cancelCodeGeneration();
     setAppState(AppState.INITIAL);
     setUpdateInstruction("");
     setUpdateImages([]);
@@ -111,11 +248,11 @@ function App() {
 
     resetCommits();
     resetHead();
+    resetPromptAssets();
 
     // Inputs
     setInputMode("image");
     setReferenceImages([]);
-    setIsImportedFromCode(false);
   };
 
   const regenerate = () => {
@@ -147,7 +284,7 @@ function App() {
     wsRef.current?.close?.(USER_CLOSE_WEB_SOCKET_CODE);
   };
 
-  // Used for code generation failure as well
+  // Used for user-initiated cancellation and failed edit rollbacks
   const cancelCodeGenerationAndReset = (commit: Commit) => {
     // When the current commit is the first version, reset the entire app state
     if (commit.type === "ai_create") {
@@ -168,45 +305,104 @@ function App() {
     }
   };
 
-  function doGenerateCode(params: CodeGenerationParams) {
+  function doGenerateCode(params: GenerationRequest) {
     // Reset the execution console
     resetExecutionConsoles();
 
     // Set the app state to coding during generation
     setAppState(AppState.CODING);
 
-    // Merge settings with params
-    const updatedParams = { ...params, ...settings };
+    const { variantHistory, ...requestParams } = params;
 
-    // Create variants dynamically - start with 4 to handle most cases
-    // Backend will use however many it needs (typically 3)
+    const selectedDesignSystem = designSystems.find(
+      (designSystem) => designSystem.id === settings.selectedDesignSystemId
+    );
+
+    // Merge settings with params
+    const updatedParams = {
+      ...requestParams,
+      ...settings,
+      designSystem: selectedDesignSystem?.content ?? null,
+    };
+
+    // Use 4 variants for create, 2 for edits to match backend counts
+    // and avoid a flash when the backend sends the actual variant count
+    const initialVariantCount =
+      requestParams.generationType === "create" ? 4 : 2;
     const baseCommitObject = {
-      variants: Array(4)
+      variants: Array(initialVariantCount)
         .fill(null)
-        .map(() => ({ code: "" })),
+        .map(() => ({
+          code: "",
+          history: cloneVariantHistory(variantHistory),
+        })),
     };
 
     const commitInputObject =
-      params.generationType === "create"
+      requestParams.generationType === "create"
         ? {
             ...baseCommitObject,
             type: "ai_create" as const,
             parentHash: null,
-            inputs: params.prompt,
+            inputs: requestParams.prompt,
           }
         : {
             ...baseCommitObject,
             type: "ai_edit" as const,
             parentHash: head,
-            inputs: params.history
-              ? params.history[params.history.length - 1]
-              : { text: "", images: [] },
+            inputs: requestParams.prompt,
           };
 
     // Create a new commit and set it as the head
     const commit = createCommit(commitInputObject);
     addCommit(commit);
     setHead(commit.hash);
+
+    lastThinkingEventIdRef.current = {};
+    lastAssistantEventIdRef.current = {};
+    lastToolEventIdRef.current = {};
+
+    const finishThinkingEvent = (variantIndex: number, status: "complete" | "error") => {
+      const eventId = lastThinkingEventIdRef.current[variantIndex];
+      if (!eventId) return;
+      finishAgentEvent(commit.hash, variantIndex, eventId, {
+        status,
+        endedAt: Date.now(),
+      });
+      delete lastThinkingEventIdRef.current[variantIndex];
+    };
+
+    const finishAssistantEvent = (variantIndex: number, status: "complete" | "error") => {
+      const eventId = lastAssistantEventIdRef.current[variantIndex];
+      if (!eventId) return;
+      finishAgentEvent(commit.hash, variantIndex, eventId, {
+        status,
+        endedAt: Date.now(),
+      });
+      delete lastAssistantEventIdRef.current[variantIndex];
+    };
+
+    const finishToolEvent = (variantIndex: number, status: "complete" | "error") => {
+      const eventId = lastToolEventIdRef.current[variantIndex];
+      if (!eventId) return;
+      finishAgentEvent(commit.hash, variantIndex, eventId, {
+        status,
+        endedAt: Date.now(),
+      });
+      delete lastToolEventIdRef.current[variantIndex];
+    };
+
+    const finishInFlightEvents = (status: "complete" | "error") => {
+      Object.keys(lastThinkingEventIdRef.current).forEach((key) => {
+        finishThinkingEvent(Number(key), status);
+      });
+      Object.keys(lastAssistantEventIdRef.current).forEach((key) => {
+        finishAssistantEvent(Number(key), status);
+      });
+      Object.keys(lastToolEventIdRef.current).forEach((key) => {
+        finishToolEvent(Number(key), status);
+      });
+    };
 
     generateCode(wsRef, updatedParams, {
       onChange: (token, variantIndex) => {
@@ -220,19 +416,141 @@ function App() {
       onVariantComplete: (variantIndex) => {
         console.log(`Variant ${variantIndex} complete event received`);
         updateVariantStatus(commit.hash, variantIndex, "complete");
+        const currentCode =
+          useProjectStore.getState().commits[commit.hash]?.variants[variantIndex]
+            ?.code || "";
+        if (currentCode.trim().length > 0) {
+          appendVariantHistoryMessage(
+            commit.hash,
+            variantIndex,
+            buildAssistantHistoryMessage(currentCode)
+          );
+        }
+        finishThinkingEvent(variantIndex, "complete");
+        finishAssistantEvent(variantIndex, "complete");
+        finishToolEvent(variantIndex, "complete");
+        if (commit.type === "ai_edit") {
+          const {
+            updateInstruction: currentInstruction,
+            updateImages: currentImages,
+          } = useAppStore.getState();
+          const instructionUnchanged =
+            currentInstruction === commit.inputs.text;
+          const imagesUnchanged =
+            currentImages.length === commit.inputs.images.length &&
+            currentImages.every(
+              (image, index) => image === commit.inputs.images[index]
+            );
+
+          // This conditional clear handles three UX scenarios:
+          // 1) All variants fail: no completion event, so keep prompt/images for retry.
+          // 2) A variant completes and user has typed/changed images: do not clear.
+          // 3) A variant completes and user has not changed draft: clear for next edit.
+          if (instructionUnchanged && imagesUnchanged) {
+            setUpdateInstruction("");
+            setUpdateImages([]);
+          }
+        }
       },
       onVariantError: (variantIndex, error) => {
         console.error(`Error in variant ${variantIndex}:`, error);
         updateVariantStatus(commit.hash, variantIndex, "error", error);
+        finishThinkingEvent(variantIndex, "error");
+        finishAssistantEvent(variantIndex, "error");
+        finishToolEvent(variantIndex, "error");
       },
       onVariantCount: (count) => {
         console.log(`Backend is using ${count} variants`);
         resizeVariants(commit.hash, count);
       },
-      onCancel: () => {
+      onVariantModels: (models) => {
+        setVariantModels(commit.hash, models);
+      },
+      onThinking: (content, variantIndex, eventId) => {
+        if (!eventId) return;
+        lastThinkingEventIdRef.current[variantIndex] = eventId;
+        startAgentEvent(commit.hash, variantIndex, {
+          id: eventId,
+          type: "thinking",
+          status: "running",
+          startedAt: Date.now(),
+        });
+        appendAgentEventContent(commit.hash, variantIndex, eventId, content);
+      },
+      onAssistant: (content, variantIndex, eventId) => {
+        if (!eventId) return;
+        lastAssistantEventIdRef.current[variantIndex] = eventId;
+        startAgentEvent(commit.hash, variantIndex, {
+          id: eventId,
+          type: "assistant",
+          status: "running",
+          startedAt: Date.now(),
+        });
+        appendAgentEventContent(commit.hash, variantIndex, eventId, content);
+      },
+      onToolStart: (data, variantIndex, eventId) => {
+        if (!eventId) return;
+        const lastThinking = lastThinkingEventIdRef.current[variantIndex];
+        if (lastThinking && lastThinking !== eventId) {
+          finishThinkingEvent(variantIndex, "complete");
+        }
+        const lastAssistant = lastAssistantEventIdRef.current[variantIndex];
+        if (lastAssistant && lastAssistant !== eventId) {
+          finishAssistantEvent(variantIndex, "complete");
+        }
+        startAgentEvent(commit.hash, variantIndex, {
+          id: eventId,
+          type: "tool",
+          status: "running",
+          toolName: data?.name,
+          input: data?.input,
+          startedAt: Date.now(),
+        });
+        lastToolEventIdRef.current[variantIndex] = eventId;
+      },
+      onToolResult: (data, variantIndex, eventId) => {
+        if (!eventId) return;
+        finishAgentEvent(commit.hash, variantIndex, eventId, {
+          status: data?.ok === false ? "error" : "complete",
+          output: data?.output,
+          endedAt: Date.now(),
+        });
+        if (lastToolEventIdRef.current[variantIndex] === eventId) {
+          delete lastToolEventIdRef.current[variantIndex];
+        }
+      },
+      onCancel: (reason, errorMessage) => {
+        // The project may have been reset while this generation was still in
+        // flight — a stale cancellation must not mutate app state.
+        if (!useProjectStore.getState().commits[commit.hash]) return;
+
+        // Close any running agent events when the socket ends without per-event
+        // terminal messages, otherwise they remain stuck in "running" state.
+        finishInFlightEvents(reason === "request_failed" ? "error" : "complete");
+
+        if (reason === "request_failed" && commit.type === "ai_create") {
+          const latestCreateCommit = useProjectStore.getState().commits[commit.hash];
+          latestCreateCommit?.variants.forEach((variant, variantIndex) => {
+            if (variant.status === "generating") {
+              updateVariantStatus(
+                commit.hash,
+                variantIndex,
+                "error",
+                errorMessage || "Generation failed. Please retry."
+              );
+            }
+          });
+          setAppState(AppState.CODE_READY);
+          return;
+        }
+
         cancelCodeGenerationAndReset(commit);
       },
       onComplete: () => {
+        // Same guard as onCancel: a generation finishing after its project
+        // was reset must not pull the app back into the editor.
+        if (!useProjectStore.getState().commits[commit.hash]) return;
+        finishInFlightEvents("complete");
         setAppState(AppState.CODE_READY);
       },
     });
@@ -253,10 +571,40 @@ function App() {
 
     // Kick off the code generation
     if (referenceImages.length > 0) {
+      const media =
+        inputMode === "video" ? [referenceImages[0]] : referenceImages;
+      const imageAssetIds =
+        inputMode === "image"
+          ? registerAssetIds(
+              "image",
+              media,
+              getAssetsById,
+              upsertPromptAssets,
+              nanoid
+            )
+          : [];
+      const videoAssetIds =
+        inputMode === "video"
+          ? registerAssetIds(
+              "video",
+              media,
+              getAssetsById,
+              upsertPromptAssets,
+              nanoid
+            )
+          : [];
+      const variantHistory = [
+        buildUserHistoryMessage(textPrompt, imageAssetIds, videoAssetIds),
+      ];
       doGenerateCode({
         generationType: "create",
         inputMode,
-        prompt: { text: textPrompt, images: [referenceImages[0]] },
+        prompt: {
+          text: textPrompt,
+          images: inputMode === "image" ? media : [],
+          videos: inputMode === "video" ? media : [],
+        },
+        variantHistory,
       });
     }
   }
@@ -270,15 +618,13 @@ function App() {
     doGenerateCode({
       generationType: "create",
       inputMode: "text",
-      prompt: { text, images: [] },
+      prompt: { text, images: [], videos: [] },
+      variantHistory: [buildUserHistoryMessage(text)],
     });
   }
 
   // Subsequent updates
-  async function doUpdate(
-    updateInstruction: string,
-    selectedElement?: HTMLElement
-  ) {
+  async function doUpdate(updateInstruction: string) {
     if (updateInstruction.trim() === "") {
       toast.error("Please include some instructions for AI on what to update.");
       return;
@@ -291,44 +637,70 @@ function App() {
       throw new Error("Update called with no head");
     }
 
-    let historyTree;
-    try {
-      historyTree = extractHistory(head, commits);
-    } catch {
-      toast.error(
-        "Version history is invalid. This shouldn't happen. Please contact support or open a Github issue."
-      );
-      throw new Error("Invalid version history");
-    }
+    const currentCommit = commits[head];
+    const currentCode =
+      currentCommit?.variants[currentCommit.selectedVariantIndex]?.code || "";
+    const optionCodes = currentCommit?.variants.map(
+      (variant) => variant.code || ""
+    );
 
     let modifiedUpdateInstruction = updateInstruction;
+    let selectedElementHtml: string | undefined;
 
-    // Send in a reference to the selected element if it exists
+    // Send in a reference to the selected element if it exists. Selection
+    // visuals are overlays, so the element's outerHTML is already clean.
     if (selectedElement) {
-      modifiedUpdateInstruction =
-        updateInstruction +
-        " referring to this element specifically: " +
-        selectedElement.outerHTML;
+      const elementHtml = selectedElement.outerHTML;
+      selectedElementHtml = elementHtml;
+      modifiedUpdateInstruction = buildSelectedElementInstruction(
+        updateInstruction,
+        elementHtml,
+        selectedElement.isConnected
+          ? describeElementContext(selectedElement)
+          : undefined
+      );
+      setSelectedElement(null);
     }
 
-    const updatedHistory = [
-      ...historyTree,
-      { text: modifiedUpdateInstruction, images: updateImages },
+    const selectedVariant = currentCommit.variants[currentCommit.selectedVariantIndex];
+    const baseVariantHistory = selectedVariant.history;
+    const updateImageAssetIds = registerAssetIds(
+      "image",
+      updateImages,
+      getAssetsById,
+      upsertPromptAssets,
+      nanoid
+    );
+    const updatedVariantHistory = [
+      ...cloneVariantHistory(baseVariantHistory),
+      buildUserHistoryMessage(modifiedUpdateInstruction, updateImageAssetIds),
     ];
+    const shouldBootstrapFromFileState =
+      baseVariantHistory.length === 0 && currentCode.trim().length > 0;
+    const updatedHistory = shouldBootstrapFromFileState
+      ? []
+      : toRequestHistory(updatedVariantHistory, getAssetsById);
 
     doGenerateCode({
       generationType: "update",
       inputMode,
-      prompt:
-        inputMode === "text"
-          ? { text: initialPrompt, images: [] }
-          : { text: "", images: [referenceImages[0]] },
+      prompt: {
+        text: updateInstruction,
+        fullText: modifiedUpdateInstruction,
+        images: updateImages,
+        videos: [],
+        selectedElementHtml,
+      },
       history: updatedHistory,
-      isImportedFromCode,
+      optionCodes,
+      variantHistory: updatedVariantHistory,
+      fileState: currentCode
+        ? {
+            path: "index.html",
+            content: currentCode,
+          }
+        : undefined,
     });
-
-    setUpdateInstruction("");
-    setUpdateImages([]);
   }
 
   const handleTermDialogOpenChange = (open: boolean) => {
@@ -349,9 +721,6 @@ function App() {
     // Reset any existing state
     reset();
 
-    // Set input state
-    setIsImportedFromCode(true);
-
     // Set up this project
     setStack(stack);
 
@@ -359,7 +728,7 @@ function App() {
     const commit = createCommit({
       type: "code_create",
       parentHash: null,
-      variants: [{ code }],
+      variants: [{ code, history: [] }],
       inputs: null,
     });
     addCommit(commit);
@@ -369,61 +738,207 @@ function App() {
     setAppState(AppState.CODE_READY);
   }
 
+  const showContentPanel =
+    appState === AppState.CODING ||
+    appState === AppState.CODE_READY ||
+    isHistoryOpen;
+  const isCodingOrReady =
+    appState === AppState.CODING || appState === AppState.CODE_READY;
+  const showMobileChatPane = showContentPanel && mobilePane === "chat";
+
   return (
-    <div className="mt-2 dark:bg-black dark:text-white">
-      {IS_RUNNING_ON_CLOUD && <PicoBadge />}
+    <div
+      className={`dark:bg-black dark:text-white ${
+        appState === AppState.CODING || appState === AppState.CODE_READY
+          ? "flex h-dvh flex-col overflow-hidden lg:block lg:h-screen"
+          : "min-h-screen"
+      }`}
+    >
       {IS_RUNNING_ON_CLOUD && (
         <TermsOfServiceDialog
           open={!settings.isTermOfServiceAccepted}
           onOpenChange={handleTermDialogOpenChange}
         />
       )}
-      <div className="lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-96 lg:flex-col">
-        <div className="flex grow flex-col gap-y-2 overflow-y-auto border-r border-gray-200 bg-white px-6 dark:bg-zinc-950 dark:text-white">
-          {/* Header with access to settings */}
-          <div className="flex items-center justify-between mt-10 mb-2">
-            <h1 className="text-2xl ">Screenshot to Code</h1>
-            <SettingsDialog settings={settings} setSettings={setSettings} />
-          </div>
 
-          {/* Generation settings like stack and model */}
-          <GenerationSettings settings={settings} setSettings={setSettings} />
-
-          {/* Show tip link until coding is complete */}
-          {/* {appState !== AppState.CODE_READY && <TipLink />} */}
-
-          {IS_RUNNING_ON_CLOUD && !settings.openAiApiKey && <OnboardingNote />}
-
-          {appState === AppState.INITIAL && (
-            <GenerateFromText doCreateFromText={doCreateFromText} />
-          )}
-
-          {/* Rest of the sidebar when we're not in the initial state */}
-          {(appState === AppState.CODING ||
-            appState === AppState.CODE_READY) && (
-            <Sidebar
-              showSelectAndEditFeature={showSelectAndEditFeature}
-              doUpdate={doUpdate}
-              regenerate={regenerate}
-              cancelCodeGeneration={cancelCodeGeneration}
-            />
-          )}
-        </div>
+      {/* Icon strip - always visible */}
+      <div
+        className="sticky top-0 z-50 lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-16 lg:flex-col"
+      >
+        <IconStrip
+          isHistoryOpen={isHistoryOpen}
+          isEditorOpen={!isHistoryOpen && !isSettingsOpen}
+          isSettingsOpen={isSettingsOpen}
+          showHistory={isCodingOrReady}
+          showEditor={isCodingOrReady}
+          onToggleHistory={() => {
+            setIsHistoryOpen((prev) => !prev);
+            setIsSettingsOpen(false);
+            setMobilePane("chat");
+          }}
+          onToggleEditor={() => {
+            setIsHistoryOpen(false);
+            setIsSettingsOpen(false);
+            setMobilePane("preview");
+          }}
+          onLogoClick={() => {
+            setIsHistoryOpen(false);
+            setIsSettingsOpen(false);
+            setMobilePane("preview");
+          }}
+          onNewProject={() => {
+            reset();
+            setIsHistoryOpen(false);
+            setIsSettingsOpen(false);
+            setMobilePane("preview");
+          }}
+          onOpenSettings={() => {
+            setIsSettingsOpen(true);
+            setIsHistoryOpen(false);
+          }}
+        />
       </div>
 
-      <main className="py-2 lg:pl-96">
-        {appState === AppState.INITIAL && (
-          <StartPane
-            doCreate={doCreate}
-            importFromCode={importFromCode}
-            settings={settings}
-          />
-        )}
+      {isCodingOrReady && !isSettingsOpen && (
+        <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-950 lg:hidden">
+          <div className="grid grid-cols-2 rounded-xl bg-gray-100 p-1 dark:bg-zinc-800">
+            <button
+              onClick={() => {
+                setIsHistoryOpen(false);
+                setMobilePane("preview");
+              }}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                mobilePane === "preview"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-zinc-700 dark:text-white"
+                  : "text-gray-500 dark:text-zinc-400"
+              }`}
+            >
+              Preview
+            </button>
+            <button
+              onClick={() => setMobilePane("chat")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                mobilePane === "chat"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-zinc-700 dark:text-white"
+                  : "text-gray-500 dark:text-zinc-400"
+              }`}
+            >
+              Chat
+            </button>
+          </div>
+        </div>
+      )}
 
-        {(appState === AppState.CODING || appState === AppState.CODE_READY) && (
-          <PreviewPane doUpdate={doUpdate} reset={reset} settings={settings} />
+      {/* Content panel - shows sidebar, history, or editor */}
+      {showContentPanel && !isSettingsOpen && (
+        <div
+          className={`border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 dark:text-white lg:fixed lg:inset-y-0 lg:left-16 lg:z-40 lg:flex lg:w-[calc(28rem-4rem)] lg:flex-col lg:border-b-0 lg:border-r ${
+            showMobileChatPane ? "block" : "hidden lg:flex"
+          }`}
+        >
+            {isHistoryOpen ? (
+              <div className="flex-1 overflow-y-auto sidebar-scrollbar-stable px-4">
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <h2 className="text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">Versions</h2>
+                    <button
+                      onClick={() => setIsHistoryOpen(false)}
+                      className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <LuChevronLeft className="w-3.5 h-3.5" />
+                      Back to editor
+                    </button>
+                  </div>
+                  <HistoryDisplay />
+                </div>
+              </div>
+            ) : (
+              <>
+                {IS_RUNNING_ON_CLOUD && !settings.openAiApiKey && (
+                  <div className="px-6 mt-4">
+                    <OnboardingNote />
+                  </div>
+                )}
+
+                {(appState === AppState.CODING ||
+                  appState === AppState.CODE_READY) && (
+                  <Sidebar
+                    doUpdate={doUpdate}
+                    regenerate={regenerate}
+                    cancelCodeGeneration={cancelCodeGeneration}
+                    designSystem={{
+                      designSystems,
+                      selectedDesignSystemId: settings.selectedDesignSystemId,
+                      setSelectedDesignSystemId,
+                      onAddNew: handleAddNewDesignSystem,
+                      onManage: () => openDesignSystemsManager(),
+                    }}
+                    onOpenVersions={() => {
+                      setIsHistoryOpen(true);
+                      setMobilePane("chat");
+                    }}
+                  />
+                )}
+              </>
+            )}
+        </div>
+      )}
+
+      <main
+        className={`${
+          isSettingsOpen
+            ? "flex flex-1 min-h-0 flex-col lg:h-full lg:pl-16"
+            : showContentPanel
+              ? "flex flex-1 min-h-0 flex-col lg:h-full lg:pl-[28rem]"
+              : "lg:pl-16"
+        } ${isCodingOrReady && !isSettingsOpen && mobilePane === "chat" ? "hidden lg:flex" : ""}`}
+      >
+        {isSettingsOpen ? (
+          <SettingsTab
+            settings={settings}
+            setSettings={setSettings}
+            appTheme={appTheme}
+            setAppTheme={setAppTheme}
+          />
+        ) : (
+          <>
+            {appState === AppState.INITIAL && (
+              <StartPane
+                doCreate={doCreate}
+                doCreateFromText={doCreateFromText}
+                importFromCode={importFromCode}
+                settings={settings}
+                setSettings={setSettings}
+                designSystems={designSystems}
+                onAddNewDesignSystem={handleAddNewDesignSystem}
+                onManageDesignSystems={() => openDesignSystemsManager()}
+              />
+            )}
+
+            {isCodingOrReady && (
+              <PreviewPane
+                settings={settings}
+                onOpenVersions={() => {
+                  setIsHistoryOpen(true);
+                  setMobilePane("chat");
+                }}
+              />
+            )}
+          </>
         )}
       </main>
+
+      <DesignSystemsModal
+        open={isDesignSystemsModalOpen}
+        onOpenChange={setIsDesignSystemsModalOpen}
+        designSystems={designSystems}
+        selectedDesignSystemId={settings.selectedDesignSystemId}
+        setSelectedDesignSystemId={setSelectedDesignSystemId}
+        initialEditingId={designSystemsModalInitialId}
+        createDesignSystem={createDesignSystem}
+        updateDesignSystem={updateDesignSystem}
+        deleteDesignSystem={deleteDesignSystem}
+      />
     </div>
   );
 }

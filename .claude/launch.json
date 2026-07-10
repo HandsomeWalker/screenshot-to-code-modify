@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["dev"],
+      "port": 5173,
+      "autoPort": true,
+      "cwd": "frontend"
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "poetry",
+      "runtimeArgs": ["run", "uvicorn", "main:app", "--port", "7001"],
+      "port": 7001,
+      "cwd": "backend"
+    }
+  ]
+}

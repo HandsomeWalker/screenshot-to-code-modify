@@ -1,9 +1,7 @@
-import React, { useState } from "react";
-import ImageUpload from "../ImageUpload";
-import { UrlInputSection } from "../UrlInputSection";
-import ImportCodeSection from "../ImportCodeSection";
-import { Settings } from "../../types";
+import React from "react";
+import { DesignSystem, Settings } from "../../types";
 import { Stack } from "../../lib/stacks";
+import UnifiedInputPane from "../unified-input/UnifiedInputPane";
 
 interface Props {
   doCreate: (
@@ -11,28 +9,37 @@ interface Props {
     inputMode: "image" | "video",
     textPrompt?: string
   ) => void;
+  doCreateFromText: (text: string) => void;
   importFromCode: (code: string, stack: Stack) => void;
   settings: Settings;
+  setSettings: React.Dispatch<React.SetStateAction<Settings>>;
+  designSystems: DesignSystem[];
+  onAddNewDesignSystem: () => void;
+  onManageDesignSystems: () => void;
 }
 
-const StartPane: React.FC<Props> = ({ doCreate, importFromCode, settings }) => {
-  const [hasImageUpload, setHasImageUpload] = useState(false);
-
+const StartPane: React.FC<Props> = ({
+  doCreate,
+  doCreateFromText,
+  importFromCode,
+  settings,
+  setSettings,
+  designSystems,
+  onAddNewDesignSystem,
+  onManageDesignSystems,
+}) => {
   return (
-    <div className="flex flex-col justify-center items-center gap-y-10">
-      <ImageUpload
-        setReferenceImages={doCreate}
-        onUploadStateChange={setHasImageUpload}
+    <div className="flex flex-col justify-center items-center py-8">
+      <UnifiedInputPane
+        doCreate={doCreate}
+        doCreateFromText={doCreateFromText}
+        importFromCode={importFromCode}
+        settings={settings}
+        setSettings={setSettings}
+        designSystems={designSystems}
+        onAddNewDesignSystem={onAddNewDesignSystem}
+        onManageDesignSystems={onManageDesignSystems}
       />
-      {!hasImageUpload && (
-        <>
-          <UrlInputSection
-            doCreate={doCreate}
-            screenshotOneApiKey={settings.screenshotOneApiKey}
-          />
-          <ImportCodeSection importFromCode={importFromCode} />
-        </>
-      )}
     </div>
   );
 };
